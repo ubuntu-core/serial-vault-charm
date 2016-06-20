@@ -1,0 +1,5 @@
+packages:
+    sites:
+      serial-vault-admin:
+        install_from:
+          source: snap-admin.yaml

@@ -1,0 +1,25 @@
+name: serial-vault-admin
+version: 0.1
+summary: Serial Vault admin interface
+description: Admin interface for the Serial Vault that signs serial assertions.
+confinement: strict
+
+apps:
+    serial-vault-admin:
+      command: bin/snap-run-admin-service
+      plugs: [network, network-bind]
+      daemon: simple
+
+parts:
+    admin-service:
+        plugin: go
+        source: git://github.com/ubuntu-core/identity-vault
+        go-importpath: github.com/ubuntu-core/identity-vault
+    assets:
+        source: git://github.com/ubuntu-core/identity-vault
+        plugin: copy
+        files:
+          bin/snap-run-admin-service: bin/snap-run-admin-service
+          bin/snap-run-signing-service: bin/snap-run-signing-service
+          settings.yaml: data/settings.yaml
+          static: static
