@@ -1,3 +1,5 @@
+series:
+  - xenial
 name: serial-vault
 summary: Serial Vault that signs serial assertions from Ubuntu devices.
 maintainer: James Jesudason <james.jesudason@canonical.com>
@@ -7,6 +9,9 @@ description: |
   signs the serial assertion for the models.
 tags:
   - service
+provides:
+  website:
+    interface: http
 requires:
   database:
-    interface: postgres
+    interface: pgsql

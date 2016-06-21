@@ -8,8 +8,8 @@ docRoot: "."
 
 # Backend database details
 driver: "postgres"
-datasource: "dbname={{ db.database() }}"
+datasource: "user={{ db.user }} host={{ db.host }} port={{ db.port }} dbname={{ db.dbname }}"
 
 # For Database Keystore
 keystore: "database"
-keystoreSecret: "secret code to encrypt the auth-key hash"
+keystoreSecret: "{{keystore_secret}}"

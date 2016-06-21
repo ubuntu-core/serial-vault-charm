@@ -1,0 +1,9 @@
+options:
+  service_type:
+    type: string
+    default: admin
+    description: Which service to run - signing or admin
+  keystore_secret:
+    type: string
+    default: abcdefg1234567890
+    description: Secret code to encrypt the auth-key hash
