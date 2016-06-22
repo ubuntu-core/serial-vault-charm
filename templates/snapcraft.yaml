@@ -9,6 +9,8 @@ apps:
       command: bin/snap-run-{{service_type}}-service
       plugs: [network, network-bind]
       daemon: simple
+    config:
+      command: bin/set-config
 
 parts:
     service:
@@ -19,6 +21,7 @@ parts:
         source: git://github.com/ubuntu-core/identity-vault
         plugin: copy
         files:
+          bin/set-config: bin/set-config
           bin/snap-run-admin-service: bin/snap-run-admin-service
           bin/snap-run-signing-service: bin/snap-run-signing-service
           settings.yaml: data/settings.yaml

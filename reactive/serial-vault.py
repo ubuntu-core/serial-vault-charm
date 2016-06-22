@@ -20,6 +20,7 @@ def install():
     if is_state('serial-vault.available'):
         return
     logger.info("***install_serial_vault")
+    print("***install_serial_vault")
 
     # Install the dependency packages
     install_packages()
@@ -31,22 +32,20 @@ def install():
 @hook('config-changed')
 def config_changed():
     logger.info("***config_changed_serial_vault")
+    print("***config_changed_serial_vault")
 
 
-@hook
-def db_relation_joined():
-    relation_set('database', config('database'))  # Explicit database name
-
-
-@hook('db-relation-changed', 'db-relation-departed')
-def db_relation_changed():
+@hook(
+    'database-relation-changed')
+def db_relation_changed(*args):
     logger.info("***DB RELATION CHANGED - setup_serial_vault")
+    print("***DB RELATION CHANGED - setup_serial_vault")
 
     database = {}
 
     for db_unit in related_units():
-        if relation_get('database', db_unit) != config('database'):
-            continue  # Not yet acknowledged requested database name.
+        # if relation_get('database', db_unit) != config('database'):
+        #     continue  # Not yet acknowledged requested database name.
 
         remote_state = relation_get('state', db_unit)
         if remote_state in ('master', 'standalone'):
@@ -55,21 +54,8 @@ def db_relation_changed():
     # Configure and install the snap when the database is ready
     install_snap(database)
 
-    hookenv.status_set('maintenance', '')
-    set_state('serial_vault.start')
-
-
-# TODO: not called... remove
-@when('database.available')
-def setup_serial_vault(postgres):
-    logger.info("***DATABASE.AVAILABLE setup_serial_vault")
-    logger.info(postgres)
-
-    # Configure and install the snap when the database is ready
-    install_snap(postgres)
-
-    hookenv.status_set('maintenance', '')
-    set_state('serial_vault.start')
+    hookenv.status_set('active', '')
+    set_state('serial-vault.active')
 
 
 def install_packages():
@@ -78,12 +64,15 @@ def install_packages():
     packages = ['snapcraft']
     fetch.apt_install(fetch.filter_installed_packages(packages))
     logger.info("***install packages done")
+    print("***install packages done")
 
 
 def install_snap(postgres):
     hookenv.status_set('maintenance', 'Install snap')
     logger.info('*** INSTALL SNAP')
+    print('*** INSTALL SNAP')
     logger.info(postgres)
+    print(postgres)
 
     # Configure the snapcraft file to deploy the requested service
     configure_snapcraft()
@@ -98,9 +87,9 @@ def install_snap(postgres):
     call(['snapcraft'])
 
     # Install the snap
-    call(['sudo', 'snap', 'install', 'serial-vault*.snap'])
+    call(['sudo', 'snap', 'install', 'serial-vault_0.1_amd64.snap'])
 
-    hookenv.status_set('maintenance', '')
+    hookenv.status_set('maintenance', 'Installed snap')
 
 
 def configure_snapcraft():
@@ -121,7 +110,7 @@ def configure_service(postgres):
     config = hookenv.config()
     templating.render(
         source='settings.yaml',
-        target='data/settings.yaml',
+        target='parts/assets/src/settings.yaml',
         context={
             'keystore_secret': config['keystore_secret'],
             'db': postgres,

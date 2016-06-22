@@ -8,7 +8,7 @@ docRoot: "."
 
 # Backend database details
 driver: "postgres"
-datasource: "user={{ db.user }} host={{ db.host }} port={{ db.port }} dbname={{ db.dbname }}"
+datasource: "dbname={{ db.database }} host={{ db.host }} port={{ db.port }} user={{ db.user }} password={{ db.password}}"
 
 # For Database Keystore
 keystore: "database"
