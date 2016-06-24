@@ -6,10 +6,13 @@ logo: "/static/images/logo-ubuntu-white.svg"
 # Path to the assets (${docRoot}/static)
 docRoot: "."
 
+# Service type: signing or admin
+mode: {{ service_type }}
+
 # Backend database details
 driver: "postgres"
 datasource: "dbname={{ db.database }} host={{ db.host }} port={{ db.port }} user={{ db.user }} password={{ db.password}}"
 
 # For Database Keystore
 keystore: "database"
-keystoreSecret: "{{keystore_secret}}"
+keystoreSecret: "{{ keystore_secret }}"

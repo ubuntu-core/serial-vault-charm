@@ -15,3 +15,5 @@ provides:
 requires:
   database:
     interface: pgsql
+series:
+  - xenial
