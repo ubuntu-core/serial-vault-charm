@@ -1,1 +1,2 @@
 includes: ['layer:basic', 'interface:pgsql', 'interface:http']
+repo: https://github.com/ubuntu-core/serial-vault-charm.git

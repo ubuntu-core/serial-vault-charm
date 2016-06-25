@@ -1,6 +1,6 @@
 import os
 import logging
-from subprocess import call, check_output, PIPE, Popen
+from subprocess import call, check_output
 
 from charms.reactive import when, hook
 from charms.reactive import is_state, set_state, remove_state
@@ -12,8 +12,8 @@ from charmhelpers.core.hookenv import (
 
 
 PORTS = {
-    'admin': 8081,
-    'signing': 8080
+    'admin': {'open': 8081, 'close': 8080},
+    'signing': {'open': 8080, 'close': 8081},
 }
 
 
@@ -38,7 +38,34 @@ def install():
 
 @hook('config-changed')
 def config_changed():
-    configure_service()
+    rel_ids = list(hookenv.relation_ids('database'))
+    if len(rel_ids) == 0:
+        log("Database not ready yet... skipping it for now")
+        return
+
+    # Get the database settings
+    db_id = rel_ids[0]
+    relations = hookenv.relations()['database'][db_id]
+    database = None
+    for key, value in relations.items():
+        if key.startswith('postgresql'):
+            database = value
+    if not database:
+        log("Database not ready yet... skipping it for now")
+
+    # Open the relevant port for the service
+    open_port()
+
+    # Update the config file with the service_type and database settings
+    update_config(database)
+
+    # Restart the snap
+    call([
+        'sudo', 'systemctl', 'restart',
+        'snap.serial-vault.serial-vault.service'])
+
+    hookenv.status_set('active', '')
+    set_state('serial-vault.active')
 
 
 @hook('database-relation-changed')
@@ -54,18 +81,23 @@ def configure_service():
     """
     hookenv.status_set('maintenance', 'Configure the service')
 
+    # Open the relevant port for the service
+    open_port()
+
     database = get_database()
     if not database:
         return
 
+    update_config(database)
+
+
+def update_config(database):
     # Create the configuration file for the snap
     create_settings(database)
 
     # Send the configuration file to the snap
-    ps = Popen(['cat', 'settings.yaml'], stdout=PIPE)
-    check_output([
-        'sudo', '/snap/bin/serial-vault.config'], stdin=ps.stdout)
-    ps.wait()
+    check_output(
+        'cat settings.yaml | sudo /snap/bin/serial-vault.config', shell=True)
 
     # Restart the snap
     call([
@@ -77,10 +109,8 @@ def configure_service():
 
 
 def get_database():
-
     if not relation_get('database'):
         log("Database not ready yet... skipping it for now")
-        hookenv.status_set('maintenance', 'Waiting for database')
         return None
 
     database = None
@@ -122,5 +152,7 @@ def create_settings(postgres):
 
 def open_port():
     config = hookenv.config()
-    if PORTS.get(config['service_type']):
-        hookenv.open_port(PORTS[config['service_type']], protocol='TCP')
+    port_config = PORTS.get(config['service_type'])
+    if port_config:
+        hookenv.open_port(port_config['open'], protocol='TCP')
+        hookenv.close_port(port_config['close'], protocol='TCP')

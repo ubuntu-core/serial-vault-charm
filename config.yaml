@@ -1,7 +1,7 @@
 options:
   service_type:
     type: string
-    default: admin
+    default: signing
     description: Which service to run - signing or admin
   keystore_secret:
     type: string
