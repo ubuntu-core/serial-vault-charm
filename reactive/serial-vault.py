@@ -52,6 +52,7 @@ def config_changed():
             database = value
     if not database:
         log("Database not ready yet... skipping it for now")
+        return
 
     # Open the relevant port for the service
     open_port()
