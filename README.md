@@ -12,4 +12,8 @@ juju add-relation serial-vault:database postgresql:db
 juju deploy serial-vault serial-vault-admin   # The admin service
 juju add-relation serial-vault-admin:database postgresql:db
 juju set-config serial-vault-admin service_type=admin
+
+# Expose the services
+juju expose serial-vault         # port 8080
+juju expose serial-vault-admin   # port 8081
 ```
