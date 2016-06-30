@@ -1,14 +1,14 @@
-import os
-import logging
-from subprocess import call, check_output
+from subprocess import call
+from subprocess import check_output
 
-from charms.reactive import when, hook
-from charms.reactive import is_state, set_state, remove_state
-from charmhelpers import fetch
 from charmhelpers.core import hookenv
+from charmhelpers.core.hookenv import log
+from charmhelpers.core.hookenv import related_units
+from charmhelpers.core.hookenv import relation_get
 from charmhelpers.core import templating
-from charmhelpers.core.hookenv import (
-    config, local_unit, log, relation_get, related_units)
+from charms.reactive import hook
+from charms.reactive import is_state
+from charms.reactive import set_state
 
 
 PORTS = {
@@ -19,7 +19,8 @@ PORTS = {
 
 @hook('install')
 def install():
-    """
+    """Charm install hook
+
     Fetches the Serial Vault snap and installs it. Configuration cannot
     be done until the database is available.
     """
@@ -29,7 +30,10 @@ def install():
     # Open the relevant port for the service
     open_port()
 
-    # Install the sanap, but it won't be ready until it has a db connection
+    # Set the proxy server and restart the snapd service, if required
+    set_proxy_server()
+
+    # Install the snap, but it won't be ready until it has a db connection
     install_snap()
 
     hookenv.status_set('maintenance', 'Waiting for database')
@@ -61,9 +65,7 @@ def config_changed():
     update_config(database)
 
     # Restart the snap
-    call([
-        'sudo', 'systemctl', 'restart',
-        'snap.serial-vault.serial-vault.service'])
+    restart_service('snap.serial-vault.serial-vault.service')
 
     hookenv.status_set('active', '')
     set_state('serial-vault.active')
@@ -75,11 +77,13 @@ def db_relation_changed(*args):
 
 
 def configure_service():
-    """
+    """Create snap config file and send it to the snap
+
     Get the database settings and create the service config file. Pipe it to
     the service using the config command. This will overwrite the settings on
     the snap's filesystem.
     """
+
     hookenv.status_set('maintenance', 'Configure the service')
 
     # Open the relevant port for the service
@@ -101,9 +105,7 @@ def update_config(database):
         'cat settings.yaml | sudo /snap/bin/serial-vault.config', shell=True)
 
     # Restart the snap
-    call([
-        'sudo', 'systemctl', 'restart',
-        'snap.serial-vault.serial-vault.service'])
+    restart_service('snap.serial-vault.serial-vault.service')
 
     hookenv.status_set('active', '')
     set_state('serial-vault.active')
@@ -126,6 +128,28 @@ def get_database():
         return None
 
     return database
+
+
+def set_proxy_server():
+    """Set up the proxy server for snapd.
+
+    Some environments may need a proxy server to access the Snap Store. The
+    access is from snapd rather than the snap command, so the system-wide
+    environment file needs to be updated and snapd needs to be restarted.
+    """
+    config = hookenv.config()
+    if len(config['proxy']) == 0:
+        return
+
+    # Update the /etc/environment file
+    env_command = 'echo "{}={}" | sudo tee -a /etc/environment'
+    check_output(
+        env_command.format('http_proxy', config['proxy']), shell=True)
+    check_output(
+        env_command.format('https_proxy', config['proxy']), shell=True)
+
+    # Restart the snapd service
+    restart_service('snapd')
 
 
 def install_snap():
@@ -157,3 +181,7 @@ def open_port():
     if port_config:
         hookenv.open_port(port_config['open'], protocol='TCP')
         hookenv.close_port(port_config['close'], protocol='TCP')
+
+
+def restart_service(service):
+    call(['sudo', 'systemctl', 'restart', service])
