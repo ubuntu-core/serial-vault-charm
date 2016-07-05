@@ -2,9 +2,8 @@ from subprocess import call
 from subprocess import check_output
 
 from charmhelpers.core import hookenv
-from charmhelpers.core.hookenv import log
-from charmhelpers.core.hookenv import related_units
-from charmhelpers.core.hookenv import relation_get
+from charmhelpers.core.hookenv import (
+    local_unit, log, relation_get, relation_id, relation_set, related_units)
 from charmhelpers.core import templating
 from charms.reactive import hook
 from charms.reactive import is_state
@@ -74,6 +73,22 @@ def config_changed():
 @hook('database-relation-changed')
 def db_relation_changed(*args):
     configure_service()
+
+
+@hook('website-relation-changed')
+def website_relation_changed(*args):
+    """
+    Set the hostname and the port for reverse proxy relations
+    """
+    config = hookenv.config()
+    port_config = PORTS.get(config['service_type'])
+    if port_config:
+        port = port_config['open']
+    else:
+        port = PORTS['signing']['open']
+
+    relation_set(
+        relation_id(), {'port': port, 'hostname': local_unit().split('/')[0]})
 
 
 def configure_service():
