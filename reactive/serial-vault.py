@@ -15,6 +15,8 @@ PORTS = {
     'signing': {'open': 8080, 'close': 8081},
 }
 
+DATABASE_NAME = 'serialvault'
+
 
 @hook('install')
 def install():
@@ -68,6 +70,12 @@ def config_changed():
 
     hookenv.status_set('active', '')
     set_state('serial-vault.active')
+
+
+@hook('database-relation-joined')
+def db_relation_joined(*args):
+    # Use a specific database name
+    relation_set(database=DATABASE_NAME)
 
 
 @hook('database-relation-changed')
@@ -133,6 +141,10 @@ def get_database():
 
     database = None
     for db_unit in related_units():
+        # Make sure that we have the specific database for the serial vault
+        if relation_get('database', db_unit) != DATABASE_NAME:
+            continue
+
         remote_state = relation_get('state', db_unit)
         if remote_state in ('master', 'standalone'):
             database = relation_get(unit=db_unit)
