@@ -1,6 +1,4 @@
-# Identity Vault version
-version: "0.3.0"
-title: "Identity Vault"
+title: "Serial Vault"
 logo: "/static/images/logo-ubuntu-white.svg"
 
 # Path to the assets (${docRoot}/static)
@@ -16,3 +14,6 @@ datasource: "dbname={{ db.database }} host={{ db.host }} port={{ db.port }} user
 # For Database Keystore
 keystore: "database"
 keystoreSecret: "{{ keystore_secret }}"
+
+# API keys for the signing service
+apiKeys: [{{ api_keys }}]

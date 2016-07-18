@@ -11,3 +11,7 @@ options:
     type: string
     default: ""
     description: Proxy server for accessing the Snap Store
+  api_keys:
+    type: string
+    default: ""
+    description: API key(s) to limit access to the signing API. Comma-separated list.

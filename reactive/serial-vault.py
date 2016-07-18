@@ -197,6 +197,7 @@ def create_settings(postgres):
         context={
             'keystore_secret': config['keystore_secret'],
             'service_type': config['service_type'],
+            'api_keys': config['api_keys'],
             'db': postgres,
         }
     )
