@@ -165,7 +165,7 @@ def set_proxy_server():
     environment file needs to be updated and snapd needs to be restarted.
     """
     config = hookenv.config()
-    if len(config['proxy']) == 0:
+    if len(config.get('proxy', "")) == 0:
         return
 
     # Update the /etc/environment file
