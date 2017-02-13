@@ -99,6 +99,22 @@ def website_relation_changed(*args):
         relation_id(), {'port': port, 'hostname': local_unit().split('/')[0]})
 
 
+@hook('upgrade-charm')
+def refresh_snap():
+    hookenv.status_set('maintenance', 'Refresh snap')
+
+    channel = '--' + snap_channel()
+
+    # Refresh the snap from the store
+    call(['sudo', 'snap', 'install', channel, 'serial-vault'])
+
+    # Restart the snap
+    restart_service('snap.serial-vault.serial-vault.service')
+
+    hookenv.status_set('active', '')
+    set_state('serial-vault.active')
+
+
 def configure_service():
     """Create snap config file and send it to the snap
 
@@ -182,8 +198,10 @@ def set_proxy_server():
 def install_snap():
     hookenv.status_set('maintenance', 'Install snap')
 
+    channel = '--' + snap_channel()
+
     # Fetch the snap from the store and install it
-    call(['sudo', 'snap', 'install', 'serial-vault'])
+    call(['sudo', 'snap', 'install', channel, 'serial-vault'])
 
     hookenv.status_set('maintenance', 'Installed snap')
 
@@ -201,6 +219,14 @@ def create_settings(postgres):
             'db': postgres,
         }
     )
+
+def snap_channel():
+    config = hookenv.config()
+    if config['channel'] not in ['stable', 'candidate', 'beta', 'edge']:
+        # Default to the stable channel
+        return 'stable'
+    else:
+        return config['channel']
 
 
 def open_port():
