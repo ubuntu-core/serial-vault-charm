@@ -15,6 +15,10 @@ options:
     type: string
     default: ""
     description: API key(s) to limit access to the signing API. Comma-separated list.
+  csrf_auth_key:
+    type: string
+    default: ""
+    description: 32 bytes long key to protect server from cross site request forgery attacks
   channel:
     type: string
     default: "stable"

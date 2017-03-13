@@ -17,3 +17,6 @@ keystoreSecret: "{{ keystore_secret }}"
 
 # API keys for the signing service
 apiKeys: [{{ api_keys }}]
+
+# 32 bytes long key to protect server from cross site request forgery attacks
+csrfAuthKey: "{{ csrf_auth_key }}"

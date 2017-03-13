@@ -216,6 +216,7 @@ def create_settings(postgres):
             'keystore_secret': config['keystore_secret'],
             'service_type': config['service_type'],
             'api_keys': config['api_keys'],
+            'csrf_auth_key': config['csrf_auth_key'],
             'db': postgres,
         }
     )
