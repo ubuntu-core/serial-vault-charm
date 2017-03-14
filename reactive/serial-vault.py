@@ -106,7 +106,7 @@ def refresh_snap():
     channel = '--' + snap_channel()
 
     # Refresh the snap from the store
-    call(['sudo', 'snap', 'install', channel, 'serial-vault'])
+    call(['sudo', 'snap', 'refresh', channel, 'serial-vault'])
 
     # Restart the snap
     restart_service('snap.serial-vault.serial-vault.service')
