@@ -13,6 +13,7 @@ from charms.reactive import set_state
 PORTS = {
     'admin': {'open': 8081, 'close': 8080},
     'signing': {'open': 8080, 'close': 8081},
+    'system-user': {'open': 8082, 'close': 8082},
 }
 
 DATABASE_NAME = 'serialvault'

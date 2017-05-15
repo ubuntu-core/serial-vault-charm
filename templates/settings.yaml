@@ -1,6 +1,3 @@
-title: "Serial Vault"
-logo: "/static/images/logo-ubuntu-white.svg"
-
 # Path to the assets (${docRoot}/static)
 docRoot: "."
 

@@ -2,7 +2,7 @@ options:
   service_type:
     type: string
     default: signing
-    description: Which service to run - signing or admin
+    description: Which service to run - signing or admin or system-user
   keystore_secret:
     type: string
     default: abcdefg1234567890
