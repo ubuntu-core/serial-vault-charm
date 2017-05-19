@@ -11,9 +11,9 @@ from charms.reactive import set_state
 
 
 PORTS = {
-    'admin': {'open': 8081, 'close': 8080},
-    'signing': {'open': 8080, 'close': 8081},
-    'system-user': {'open': 8082, 'close': 8082},
+    'admin': {'open': 8081, 'close': [8080, 8082]},
+    'signing': {'open': 8080, 'close': [8081, 8082]},
+    'system-user': {'open': 8082, 'close': [8080, 8081]},
 }
 
 DATABASE_NAME = 'serialvault'
@@ -232,11 +232,15 @@ def snap_channel():
 
 
 def open_port():
+    """
+    Open the port that is requested for the service and close the others.
+    """
     config = hookenv.config()
     port_config = PORTS.get(config['service_type'])
     if port_config:
         hookenv.open_port(port_config['open'], protocol='TCP')
-        hookenv.close_port(port_config['close'], protocol='TCP')
+        for port in port_config['close']:
+            hookenv.close_port(port, protocol='TCP')
 
 
 def restart_service(service):
