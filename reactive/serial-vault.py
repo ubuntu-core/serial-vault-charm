@@ -66,8 +66,8 @@ def config_changed():
     # Update the config file with the service_type and database settings
     update_config(database)
 
-    # Restart the snap
-    restart_service('snap.serial-vault.serial-vault.service')
+    # Refresh the snap and restart the snap service
+    refresh_snap()
 
     hookenv.status_set('active', '')
     set_state('serial-vault.active')
