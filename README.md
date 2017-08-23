@@ -1,5 +1,5 @@
 # About
-This charm installs a Serial Vault service, https://github.com/ubuntu-core/identity-vault
+This charm installs a Serial Vault service, https://github.com/CanonicalLtd/serial-vault
 
 # Install
 After bootstrapping a juju environment, run:

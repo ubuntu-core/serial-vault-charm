@@ -15,8 +15,12 @@ datasource: "dbname={{ db.database }} host={{ db.host }} port={{ db.port }} user
 keystore: "database"
 keystoreSecret: "{{ keystore_secret }}"
 
-# API keys for the signing service
-apiKeys: [{{ api_keys }}]
-
 # 32 bytes long key to protect server from cross site request forgery attacks
 csrfAuthKey: "{{ csrf_auth_key }}"
+
+# Return URL of the service (needed for OpenID)
+urlHost: "{{ url_host }}"
+urlScheme: https
+
+# Enable user authentication using Ubuntu SSO
+enableUserAuth: "{{ enable_user_auth }}"
