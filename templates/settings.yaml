@@ -23,4 +23,4 @@ urlHost: "{{ url_host }}"
 urlScheme: https
 
 # Enable user authentication using Ubuntu SSO
-enableUserAuth: "{{ enable_user_auth }}"
+enableUserAuth: {{ enable_user_auth }}

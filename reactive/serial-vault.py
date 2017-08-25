@@ -224,7 +224,7 @@ def create_settings(postgres):
             'csrf_auth_key': config['csrf_auth_key'],
             'db': postgres,
             'url_host': config['url_host'],
-            'enable_user_auth': config['enable_user_auth'],
+            'enable_user_auth': bool(config['enable_user_auth']),
         }
     )
 
@@ -235,7 +235,6 @@ def snap_channel():
         return 'stable'
     else:
         return config['channel']
-
 
 def open_port():
     """

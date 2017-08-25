@@ -13,7 +13,7 @@ options:
     description: Proxy server for accessing the Snap Store
   csrf_auth_key:
     type: string
-    default: ""
+    default: "2E6ZYnVYUfDLRLV/ne8M6v1jyB/376BL9ORnN3Kgb04uSFalr2ygReVsOt0PaGEIRuID10TePBje5xdjIOEjQQ=="
     description: 32 bytes long key to protect server from cross site request forgery attacks
   channel:
     type: string
