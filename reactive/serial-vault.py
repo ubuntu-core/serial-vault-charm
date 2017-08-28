@@ -16,6 +16,11 @@ PORTS = {
     'system-user': {'open': 8082, 'close': [8080, 8081]},
 }
 
+SNAP_NAME = 'serial-vault-server'
+SNAP_SERVICE = 'snap.' + SNAP_NAME + '.serial-vault.service'
+AVAILABLE = SNAP_NAME + '.available'
+ACTIVE = SNAP_NAME + '.active'
+
 DATABASE_NAME = 'serialvault'
 
 
@@ -26,7 +31,7 @@ def install():
     Fetches the Serial Vault snap and installs it. Configuration cannot
     be done until the database is available.
     """
-    if is_state('serial-vault.available'):
+    if is_state(AVAILABLE):
         return
 
     # Open the relevant port for the service
@@ -39,7 +44,7 @@ def install():
     install_snap()
 
     hookenv.status_set('maintenance', 'Waiting for database')
-    set_state('serial-vault.available')
+    set_state(AVAILABLE)
 
 
 @hook('config-changed')
@@ -70,7 +75,7 @@ def config_changed():
     refresh_snap()
 
     hookenv.status_set('active', '')
-    set_state('serial-vault.active')
+    set_state(ACTIVE)
 
 
 @hook('database-relation-joined')
@@ -107,13 +112,13 @@ def refresh_snap():
     channel = '--' + snap_channel()
 
     # Refresh the snap from the store
-    call(['sudo', 'snap', 'refresh', channel, 'serial-vault'])
+    call(['sudo', 'snap', 'refresh', channel, SNAP_NAME])
 
     # Restart the snap
-    restart_service('snap.serial-vault.serial-vault.service')
+    restart_service(SNAP_SERVICE)
 
     hookenv.status_set('active', '')
-    set_state('serial-vault.active')
+    set_state(ACTIVE)
 
 
 def configure_service():
@@ -142,13 +147,13 @@ def update_config(database):
 
     # Send the configuration file to the snap
     check_output(
-        'cat settings.yaml | sudo /snap/bin/serial-vault.config', shell=True)
+        'cat settings.yaml | sudo /snap/bin/' + SNAP_NAME + '.config', shell=True)
 
     # Restart the snap
-    restart_service('snap.serial-vault.serial-vault.service')
+    restart_service(SNAP_SERVICE)
 
     hookenv.status_set('active', '')
-    set_state('serial-vault.active')
+    set_state(ACTIVE)
 
 
 def get_database():
@@ -202,7 +207,7 @@ def install_snap():
     channel = '--' + snap_channel()
 
     # Fetch the snap from the store and install it
-    call(['sudo', 'snap', 'install', channel, 'serial-vault'])
+    call(['sudo', 'snap', 'install', channel, SNAP_NAME])
 
     hookenv.status_set('maintenance', 'Installed snap')
 
@@ -216,9 +221,10 @@ def create_settings(postgres):
         context={
             'keystore_secret': config['keystore_secret'],
             'service_type': config['service_type'],
-            'api_keys': config['api_keys'],
             'csrf_auth_key': config['csrf_auth_key'],
             'db': postgres,
+            'url_host': config['url_host'],
+            'enable_user_auth': bool(config['enable_user_auth']),
         }
     )
 
@@ -229,7 +235,6 @@ def snap_channel():
         return 'stable'
     else:
         return config['channel']
-
 
 def open_port():
     """

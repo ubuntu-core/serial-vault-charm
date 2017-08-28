@@ -11,15 +11,19 @@ options:
     type: string
     default: ""
     description: Proxy server for accessing the Snap Store
-  api_keys:
-    type: string
-    default: ""
-    description: API key(s) to limit access to the signing API. Comma-separated list.
   csrf_auth_key:
     type: string
-    default: ""
+    default: "2E6ZYnVYUfDLRLV/ne8M6v1jyB/376BL9ORnN3Kgb04uSFalr2ygReVsOt0PaGEIRuID10TePBje5xdjIOEjQQ=="
     description: 32 bytes long key to protect server from cross site request forgery attacks
   channel:
     type: string
-    default: "stable"
+    default: stable
     description: The store channel from which the snap will be installed e.g. stable, candidate, beta, edge.
+  url_host:
+    type: string
+    default: serial-vault:443
+    description: Return URL of the service (needed for OpenID) without the protocol schema
+  enable_user_auth:
+    type: boolean
+    default: true
+    description: Enable user authentication using Ubuntu SSO
