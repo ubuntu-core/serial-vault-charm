@@ -16,8 +16,8 @@ PORTS = {
     'system-user': {'open': 8082, 'close': [8080, 8081]},
 }
 
-SNAP_NAME = 'serial-vault-server'
-SNAP_SERVICE = 'snap.' + SNAP_NAME + '.serial-vault.service'
+SNAP_NAME = 'serial-vault'
+SNAP_SERVICE = 'snap.' + SNAP_NAME + '.service.service'
 AVAILABLE = SNAP_NAME + '.available'
 ACTIVE = SNAP_NAME + '.active'
 
