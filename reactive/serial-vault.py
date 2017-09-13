@@ -1,13 +1,22 @@
+import os
+import tempfile
+import shutil
+
 from subprocess import call
+from subprocess import check_call
 from subprocess import check_output
 
 from charmhelpers.core import hookenv
 from charmhelpers.core.hookenv import (
-    local_unit, log, relation_get, relation_id, relation_set, related_units)
+    charm_dir, local_unit, log, relation_get, relation_id, relation_set, related_units)
 from charmhelpers.core import templating
+from charmhelpers.fetch import install_remote
 from charms.reactive import hook
 from charms.reactive import is_state
 from charms.reactive import set_state
+
+from swiftclient.service import SwiftService, SwiftError
+from helpers import dequote
 
 
 PORTS = {
@@ -16,10 +25,13 @@ PORTS = {
     'system-user': {'open': 8082, 'close': [8080, 8081]},
 }
 
-SNAP_NAME = 'serial-vault'
-SNAP_SERVICE = 'snap.' + SNAP_NAME + '.service.service'
-AVAILABLE = SNAP_NAME + '.available'
-ACTIVE = SNAP_NAME + '.active'
+
+PROJECT = 'serial-vault'
+SERVICE = '{}.service'.format(PROJECT)
+AVAILABLE = '{}.available'.format(PROJECT)
+ACTIVE = '{}.active'.format(PROJECT)
+
+SYSTEMD_UNIT_FILE = os.path.join(charm_dir(), 'files', 'systemd', SERVICE)
 
 DATABASE_NAME = 'serialvault'
 
@@ -40,8 +52,8 @@ def install():
     # Set the proxy server and restart the snapd service, if required
     set_proxy_server()
 
-    # Install the snap, but it won't be ready until it has a db connection
-    install_snap()
+    # Deploy binaries and systemd configuration, but it won't be ready until it has a db connection
+    download_and_deploy_service()
 
     hookenv.status_set('maintenance', 'Waiting for database')
     set_state(AVAILABLE)
@@ -71,8 +83,8 @@ def config_changed():
     # Update the config file with the service_type and database settings
     update_config(database)
 
-    # Refresh the snap and restart the snap service
-    refresh_snap()
+    # Refresh the service payload and restart the service
+    refresh_service()
 
     hookenv.status_set('active', '')
     set_state(ACTIVE)
@@ -106,16 +118,13 @@ def website_relation_changed(*args):
 
 
 @hook('upgrade-charm')
-def refresh_snap():
-    hookenv.status_set('maintenance', 'Refresh snap')
+def refresh_service():
+    hookenv.status_set('maintenance', 'Refresh the service')
 
-    channel = '--' + snap_channel()
+    # Overrides previous deployment
+    download_and_deploy_service()
 
-    # Refresh the snap from the store
-    call(['sudo', 'snap', 'refresh', channel, SNAP_NAME])
-
-    # Restart the snap
-    restart_service(SNAP_SERVICE)
+    restart_service(SERVICE)
 
     hookenv.status_set('active', '')
     set_state(ACTIVE)
@@ -145,12 +154,11 @@ def update_config(database):
     # Create the configuration file for the snap
     create_settings(database)
 
-    # Send the configuration file to the snap
-    check_output(
-        'cat settings.yaml | sudo /snap/bin/' + SNAP_NAME + '.config', shell=True)
+    # Send the configuration file to its right path
+    check_call(['sudo', 'mv', 'settings.yaml', '/usr/local/etc/'], shell=True)
 
     # Restart the snap
-    restart_service(SNAP_SERVICE)
+    restart_service(SERVICE)
 
     hookenv.status_set('active', '')
     set_state(ACTIVE)
@@ -200,16 +208,79 @@ def set_proxy_server():
     # Restart the snapd service
     restart_service('snapd')
 
+def download_and_deploy_service():
+    """ Downloads from swift container and deploys service payload
+    """
+    payload_local_path = download_service_payload_from_swift_container()
+    
+    # In case an empty path is returned, search for payload settings value
+    # and treat it as a direct downloadable payload url
+    if not payload_local_path:
+        config = hookenv.config()
+        payload_local_path = config['payload']
 
-def install_snap():
-    hookenv.status_set('maintenance', 'Install snap')
+    deploy_service_payload(payload_local_path)
 
-    channel = '--' + snap_channel()
+def download_service_payload_from_swift_container():
+    """ Updates environment with 'environment_variables' defined ones,
+    gets container and payload references from config, and use them
+    to download from swift the service payload.
+    Method returns the path to the downloaded file
+    """
+    hookenv.status_set('maintenance', 'Download service payload from swift container')
+    # Update environment with vars defined in 'environment_variables' config
+    update_env()
 
-    # Fetch the snap from the store and install it
-    call(['sudo', 'snap', 'install', channel, SNAP_NAME])
+    config = hookenv.config()
+    container = config['swift_container']
+    payload = config['payload']
+    if not container or not payload:
+        return ''
 
-    hookenv.status_set('maintenance', 'Installed snap')
+    with SwiftService() as swift:
+        try:
+            objects = [payload]
+            for down_res in swift.download(
+                    container=container,
+                    objects=objects):
+                if down_res['success']:
+                    log('downloaded from swift container: {}'.format(down_res['path']))
+                    return down_res['path']
+                else:
+                    log('download failed for {}'.format(down_res['object']))
+                    return ''
+        except SwiftError as e:
+            log('An error happened while trying to download from swift container. {}'.format(e.value))
+            return ''
+
+    hookenv.status_set('maintenance', 'Service payload downloaded')
+
+def deploy_service_payload(payload_path):
+    """ Gets binaries and systemd config tgz from payload path, uncompresses it in a
+    temporary folder and:
+    - moves serial-vault and serial-vault-admin to /usr/local/bin
+    - moves serial-vault.service to /etc/systemd/system
+    - creates settings and store in /usr/local/etc/settings.yaml
+    """
+    hookenv.status_set('maintenance', 'Deploy service payload')
+    
+    tmp_dir = tempfile.mkdtemp()
+    payload_dir = install_remote(payload_path, dest=tmp_dir)
+    if payload_dir == tmp_dir:
+        log('Got binaries tgz at {}'.format(payload_dir))
+        
+        if not os.path.isfile(os.path.join(payload_dir, 'serial-vault')):
+            log('Could not find serial-vault binary')
+            return
+        if not os.path.isfile(os.path.join(payload_dir, 'serial-vault-admin')):
+            log('Could not find serial-vault-admin binary')
+            return
+    
+        check_call(['sudo', 'mv', os.path.join(payload_dir, 'serial-vault'), '/usr/local/bin/'])
+        check_call(['sudo', 'mv', os.path.join(payload_dir, 'serial-vault-admin'), '/usr/local/bin/'])
+        check_call(['sudo', 'mv', SYSTEMD_UNIT_FILE, '/etc/systemd/system/'])
+
+    hookenv.status_set('maintenance', 'Service payload deployed')
 
 
 def create_settings(postgres):
@@ -228,14 +299,6 @@ def create_settings(postgres):
         }
     )
 
-def snap_channel():
-    config = hookenv.config()
-    if config['channel'] not in ['stable', 'candidate', 'beta', 'edge']:
-        # Default to the stable channel
-        return 'stable'
-    else:
-        return config['channel']
-
 def open_port():
     """
     Open the port that is requested for the service and close the others.
@@ -250,3 +313,14 @@ def open_port():
 
 def restart_service(service):
     call(['sudo', 'systemctl', 'restart', service])
+
+def update_env():
+    config = hookenv.config()
+    env_vars_string = config('environment_variables')
+
+    if env_vars_string:
+        for env_var_string in env_vars_string.split(' '):
+            key, value = env_var_string.split('=')
+            value = dequote(value)
+            log('setting env var {}={}'.format(key, value))
+            os.environ[key] = value
