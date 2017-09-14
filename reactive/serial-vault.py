@@ -224,11 +224,6 @@ def download_service_payload_from_swift_container():
     """
     hookenv.status_set('maintenance', 'Download service payload from swift container')
     
-
-    apt_install('python-swiftclient')
-    from swiftclient.service import SwiftService as swift_service
-    from siwftclient.service import SwiftError as swift_error
-
     # Update environment with vars defined in 'environment_variables' config
     update_env()
 
@@ -238,23 +233,21 @@ def download_service_payload_from_swift_container():
     if not container or not payload:
         return ''
 
-    with swift_service() as swift:
-        try:
-            objects = [payload]
-            for down_res in swift.download(
-                    container=container,
-                    objects=objects):
-                if down_res['success']:
-                    log('downloaded from swift container: {}'.format(down_res['path']))
-                    return down_res['path']
-                else:
-                    log('download failed for {}'.format(down_res['object']))
-                    return ''
-        except swift_error as e:
-            log('An error happened while trying to download from swift container. {}'.format(e.value))
-            return ''
+    apt_install('python-swiftclient')
+    check_call(['sudo', 'swift', '-v', 
+        '--os-username', os.environ.get('OS_USERNAME'),
+        '--os-tenant-name', os.environ.get('OS_TENANT_NAME'),
+        '--os-password', os.environ.get('OS_PASSWORD'),
+        '--os-auth-url', os.environ.get('OS_AUTH_URL'),
+        '--os-region-name', os.environ.get('OS_REGION_NAME'),
+        'download',
+        container,
+        payload])
 
     hookenv.status_set('maintenance', 'Service payload downloaded')
+
+    # payload would be deployed to current folder
+    return 'file://{}'.format(os.path.join(charm_dir(), payload));
 
 def deploy_service_payload(payload_path):
     """ Gets binaries and systemd config tgz from payload path, uncompresses it in a
@@ -264,6 +257,13 @@ def deploy_service_payload(payload_path):
     - creates settings and store in /usr/local/etc/settings.yaml
     """
     hookenv.status_set('maintenance', 'Deploy service payload')
+
+    # In case there is no payload path, read it from config payload setting
+    if not payload_path:
+        config = hookenv.config()
+        payload_path = config['payload']
+        if not payload_path:
+            raise Exception('payload not available')
     
     tmp_dir = tempfile.mkdtemp()
     payload_dir = install_remote(payload_path, dest=tmp_dir)
@@ -317,7 +317,7 @@ def restart_service(service):
 
 def update_env():
     config = hookenv.config()
-    env_vars_string = config('environment_variables')
+    env_vars_string = config['environment_variables']
 
     if env_vars_string:
         for env_var_string in env_vars_string.split(' '):
