@@ -11,20 +11,16 @@ from charmhelpers.core.hookenv import (
     charm_dir, local_unit, log, relation_get, relation_id, relation_set, related_units)
 from charmhelpers.core import templating
 from charmhelpers.fetch import install_remote
+from charmhelpers.fetch import apt_install
 from charms.reactive import hook
 from charms.reactive import is_state
 from charms.reactive import set_state
-
-from swiftclient.service import SwiftService, SwiftError
-from helpers import dequote
-
 
 PORTS = {
     'admin': {'open': 8081, 'close': [8080, 8082]},
     'signing': {'open': 8080, 'close': [8081, 8082]},
     'system-user': {'open': 8082, 'close': [8080, 8081]},
 }
-
 
 PROJECT = 'serial-vault'
 SERVICE = '{}.service'.format(PROJECT)
@@ -35,8 +31,7 @@ SYSTEMD_UNIT_FILE = os.path.join(charm_dir(), 'files', 'systemd', SERVICE)
 
 DATABASE_NAME = 'serialvault'
 
-
-@hook('install')
+@hook("install")
 def install():
     """Charm install hook
 
@@ -228,6 +223,12 @@ def download_service_payload_from_swift_container():
     Method returns the path to the downloaded file
     """
     hookenv.status_set('maintenance', 'Download service payload from swift container')
+    
+
+    apt_install('python-swiftclient')
+    from swiftclient.service import SwiftService as swift_service
+    from siwftclient.service import SwiftError as swift_error
+
     # Update environment with vars defined in 'environment_variables' config
     update_env()
 
@@ -237,7 +238,7 @@ def download_service_payload_from_swift_container():
     if not container or not payload:
         return ''
 
-    with SwiftService() as swift:
+    with swift_service() as swift:
         try:
             objects = [payload]
             for down_res in swift.download(
@@ -249,7 +250,7 @@ def download_service_payload_from_swift_container():
                 else:
                     log('download failed for {}'.format(down_res['object']))
                     return ''
-        except SwiftError as e:
+        except swift_error as e:
             log('An error happened while trying to download from swift container. {}'.format(e.value))
             return ''
 
@@ -324,3 +325,16 @@ def update_env():
             value = dequote(value)
             log('setting env var {}={}'.format(key, value))
             os.environ[key] = value
+
+def dequote(s):
+    """
+    If a string has single or double quotes around it, remove them.
+    If a matching pair of quotes is not found, return the string unchanged.
+    """
+
+    if (
+        s.startswith(("'", '"')) and s.endswith(("'", '"'))
+        and (s[0] == s[-1])  # make sure the pair of quotes match
+    ):
+        s = s[1:-1]
+    return s
