@@ -47,9 +47,8 @@ DATABASE_NAME = 'serialvault'
 @hook("install")
 def install():
     """Charm install hook
-
-    Fetches the Serial Vault snap and installs it. Configuration cannot
-    be done until the database is available.
+    Fetches the Serial Vault service payload and installs it. 
+    Configuration cannot be done until the database is available.
     """
     if is_state(AVAILABLE):
         return
@@ -143,11 +142,8 @@ def refresh_service():
     set_state(ACTIVE)
 
 def configure_service():
-    """Create snap config file and send it to the snap
-
-    Get the database settings and create the service config file. Pipe it to
-    the service using the config command. This will overwrite the settings on
-    the snap's filesystem.
+    """Create service config file and place it in /usr/local/etc.
+    Get the database settings and create the service config file
     """
 
     hookenv.status_set('maintenance', 'Configure the service')
@@ -163,13 +159,13 @@ def configure_service():
 
 
 def update_config(database):
-    # Create the configuration file for the snap
+    # Create the configuration file for the service
     create_settings(database)
 
     # Send the configuration file to its right path
     check_call(['sudo', 'mv', 'settings.yaml', '/usr/local/etc/'])
 
-    # Restart the snap
+    # Restart the service
     restart_service()
 
     hookenv.status_set('active', '')
