@@ -2,19 +2,32 @@ import os
 import tempfile
 import shutil
 
-from subprocess import call
-from subprocess import check_call
-from subprocess import check_output
-
-from charmhelpers.core import hookenv
+from subprocess import (
+    call,
+    check_call,
+    check_output
+)
 from charmhelpers.core.hookenv import (
-    charm_dir, local_unit, log, relation_get, relation_id, relation_set, related_units)
-from charmhelpers.core import templating
-from charmhelpers.fetch import install_remote
-from charmhelpers.fetch import apt_install
-from charms.reactive import hook
-from charms.reactive import is_state
-from charms.reactive import set_state
+    charm_dir, 
+    local_unit, 
+    log, 
+    relation_get, 
+    relation_id, 
+    relation_set, 
+    related_units)
+from charmhelpers.core import (
+    templating,
+    hookenv
+)
+from charmhelpers.fetch import (
+    apt_install,
+    install_remote
+)
+from charms.reactive import (
+    hook, 
+    is_state, 
+    set_state
+)
 
 PORTS = {
     'admin': {'open': 8081, 'close': [8080, 8082]},
@@ -44,14 +57,11 @@ def install():
     # Open the relevant port for the service
     open_port()
 
-    # Set the proxy server and restart the snapd service, if required
-    set_proxy_server()
-
     # Deploy binaries and systemd configuration, but it won't be ready until it has a db connection
     download_and_deploy_service()
 
     # Don't start until having db connection
-    enable_service(SERVICE)
+    enable_service()
 
     hookenv.status_set('maintenance', 'Waiting for database')
     set_state(AVAILABLE)
@@ -116,17 +126,21 @@ def website_relation_changed(*args):
 
 
 @hook('upgrade-charm')
+def upgrade_charm():
+    # Just in case the service configuration has changed, reload the daemon also
+    reload_systemd()
+    restart_service()
+
 def refresh_service():
     hookenv.status_set('maintenance', 'Refresh the service')
 
     # Overrides previous deployment
     download_and_deploy_service()
 
-    restart_service(SERVICE)
+    restart_service()
 
     hookenv.status_set('active', '')
     set_state(ACTIVE)
-
 
 def configure_service():
     """Create snap config file and send it to the snap
@@ -153,10 +167,10 @@ def update_config(database):
     create_settings(database)
 
     # Send the configuration file to its right path
-    check_call(['sudo', 'mv', 'settings.yaml', '/usr/local/etc/'], shell=True)
+    check_call(['sudo', 'mv', 'settings.yaml', '/usr/local/etc/'])
 
     # Restart the snap
-    restart_service(SERVICE)
+    restart_service()
 
     hookenv.status_set('active', '')
     set_state(ACTIVE)
@@ -183,28 +197,6 @@ def get_database():
         return None
 
     return database
-
-
-def set_proxy_server():
-    """Set up the proxy server for snapd.
-
-    Some environments may need a proxy server to access the Snap Store. The
-    access is from snapd rather than the snap command, so the system-wide
-    environment file needs to be updated and snapd needs to be restarted.
-    """
-    config = hookenv.config()
-    if len(config.get('proxy', "")) == 0:
-        return
-
-    # Update the /etc/environment file
-    env_command = 'echo "{}={}" | sudo tee -a /etc/environment'
-    check_output(
-        env_command.format('http_proxy', config['proxy']), shell=True)
-    check_output(
-        env_command.format('https_proxy', config['proxy']), shell=True)
-
-    # Restart the snapd service
-    restart_service('snapd')
 
 def download_and_deploy_service():
     """ Downloads from swift container and deploys service payload
@@ -282,7 +274,7 @@ def deploy_service_payload(payload_path):
     
         check_call(['sudo', 'mv', os.path.join(payload_dir, 'serial-vault'), '/usr/local/bin/'])
         check_call(['sudo', 'mv', os.path.join(payload_dir, 'serial-vault-admin'), '/usr/local/bin/'])
-        check_call(['sudo', 'mv', SYSTEMD_UNIT_FILE, '/etc/systemd/system/'])
+        check_call(['sudo', 'cp', SYSTEMD_UNIT_FILE, '/etc/systemd/system/'])
 
     hookenv.status_set('maintenance', 'Service payload deployed')
 
@@ -314,11 +306,14 @@ def open_port():
         for port in port_config['close']:
             hookenv.close_port(port, protocol='TCP')
 
-def enable_service(service):
-    call(['sudo', 'systemctl', 'enable', service])
+def enable_service():
+    call(['sudo', 'systemctl', 'enable', SERVICE])
 
-def restart_service(service):
-    call(['sudo', 'systemctl', 'restart', service])
+def restart_service():
+    call(['sudo', 'systemctl', 'restart', SERVICE])
+
+def reload_systemd():
+    call(['sudo', 'systemctl', 'daemon-reload'])
 
 def update_env():
     config = hookenv.config()
