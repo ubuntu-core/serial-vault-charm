@@ -50,6 +50,9 @@ def install():
     # Deploy binaries and systemd configuration, but it won't be ready until it has a db connection
     download_and_deploy_service()
 
+    # Don't start until having db connection
+    enable_service(SERVICE)
+
     hookenv.status_set('maintenance', 'Waiting for database')
     set_state(AVAILABLE)
 
@@ -234,7 +237,7 @@ def download_service_payload_from_swift_container():
         return ''
 
     apt_install('python-swiftclient')
-    check_call(['sudo', 'swift', '-v', 
+    check_call(['swift', '-v', 
         '--os-username', os.environ.get('OS_USERNAME'),
         '--os-tenant-name', os.environ.get('OS_TENANT_NAME'),
         '--os-password', os.environ.get('OS_PASSWORD'),
@@ -311,6 +314,8 @@ def open_port():
         for port in port_config['close']:
             hookenv.close_port(port, protocol='TCP')
 
+def enable_service(service):
+    call(['sudo', 'systemctl', 'enable', service])
 
 def restart_service(service):
     call(['sudo', 'systemctl', 'restart', service])
