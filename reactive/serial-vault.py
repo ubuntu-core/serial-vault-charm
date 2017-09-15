@@ -1,14 +1,33 @@
-from subprocess import call
-from subprocess import check_output
+import os
+import tempfile
+import shutil
 
-from charmhelpers.core import hookenv
+from subprocess import (
+    call,
+    check_call,
+    check_output
+)
 from charmhelpers.core.hookenv import (
-    local_unit, log, relation_get, relation_id, relation_set, related_units)
-from charmhelpers.core import templating
-from charms.reactive import hook
-from charms.reactive import is_state
-from charms.reactive import set_state
-
+    charm_dir, 
+    local_unit, 
+    log, 
+    relation_get, 
+    relation_id, 
+    relation_set, 
+    related_units)
+from charmhelpers.core import (
+    templating,
+    hookenv
+)
+from charmhelpers.fetch import (
+    apt_install,
+    install_remote
+)
+from charms.reactive import (
+    hook, 
+    is_state, 
+    set_state
+)
 
 PORTS = {
     'admin': {'open': 8081, 'close': [8080, 8082]},
@@ -16,20 +35,20 @@ PORTS = {
     'system-user': {'open': 8082, 'close': [8080, 8081]},
 }
 
-SNAP_NAME = 'serial-vault'
-SNAP_SERVICE = 'snap.' + SNAP_NAME + '.service.service'
-AVAILABLE = SNAP_NAME + '.available'
-ACTIVE = SNAP_NAME + '.active'
+PROJECT = 'serial-vault'
+SERVICE = '{}.service'.format(PROJECT)
+AVAILABLE = '{}.available'.format(PROJECT)
+ACTIVE = '{}.active'.format(PROJECT)
+
+SYSTEMD_UNIT_FILE = os.path.join(charm_dir(), 'files', 'systemd', SERVICE)
 
 DATABASE_NAME = 'serialvault'
 
-
-@hook('install')
+@hook("install")
 def install():
     """Charm install hook
-
-    Fetches the Serial Vault snap and installs it. Configuration cannot
-    be done until the database is available.
+    Fetches the Serial Vault service payload and installs it. 
+    Configuration cannot be done until the database is available.
     """
     if is_state(AVAILABLE):
         return
@@ -37,11 +56,11 @@ def install():
     # Open the relevant port for the service
     open_port()
 
-    # Set the proxy server and restart the snapd service, if required
-    set_proxy_server()
+    # Deploy binaries and systemd configuration, but it won't be ready until it has a db connection
+    download_and_deploy_service()
 
-    # Install the snap, but it won't be ready until it has a db connection
-    install_snap()
+    # Don't start until having db connection
+    enable_service()
 
     hookenv.status_set('maintenance', 'Waiting for database')
     set_state(AVAILABLE)
@@ -71,8 +90,8 @@ def config_changed():
     # Update the config file with the service_type and database settings
     update_config(database)
 
-    # Refresh the snap and restart the snap service
-    refresh_snap()
+    # Refresh the service payload and restart the service
+    refresh_service()
 
     hookenv.status_set('active', '')
     set_state(ACTIVE)
@@ -106,27 +125,25 @@ def website_relation_changed(*args):
 
 
 @hook('upgrade-charm')
-def refresh_snap():
-    hookenv.status_set('maintenance', 'Refresh snap')
+def upgrade_charm():
+    # Just in case the service configuration has changed, reload the daemon also
+    reload_systemd()
+    restart_service()
 
-    channel = '--' + snap_channel()
+def refresh_service():
+    hookenv.status_set('maintenance', 'Refresh the service')
 
-    # Refresh the snap from the store
-    call(['sudo', 'snap', 'refresh', channel, SNAP_NAME])
+    # Overrides previous deployment
+    download_and_deploy_service()
 
-    # Restart the snap
-    restart_service(SNAP_SERVICE)
+    restart_service()
 
     hookenv.status_set('active', '')
     set_state(ACTIVE)
 
-
 def configure_service():
-    """Create snap config file and send it to the snap
-
-    Get the database settings and create the service config file. Pipe it to
-    the service using the config command. This will overwrite the settings on
-    the snap's filesystem.
+    """Create service config file and place it in /usr/local/etc.
+    Get the database settings and create the service config file
     """
 
     hookenv.status_set('maintenance', 'Configure the service')
@@ -142,15 +159,14 @@ def configure_service():
 
 
 def update_config(database):
-    # Create the configuration file for the snap
+    # Create the configuration file for the service
     create_settings(database)
 
-    # Send the configuration file to the snap
-    check_output(
-        'cat settings.yaml | sudo /snap/bin/' + SNAP_NAME + '.config', shell=True)
+    # Send the configuration file to its right path
+    check_call(['sudo', 'mv', 'settings.yaml', '/usr/local/etc/'])
 
-    # Restart the snap
-    restart_service(SNAP_SERVICE)
+    # Restart the service
+    restart_service()
 
     hookenv.status_set('active', '')
     set_state(ACTIVE)
@@ -178,38 +194,85 @@ def get_database():
 
     return database
 
-
-def set_proxy_server():
-    """Set up the proxy server for snapd.
-
-    Some environments may need a proxy server to access the Snap Store. The
-    access is from snapd rather than the snap command, so the system-wide
-    environment file needs to be updated and snapd needs to be restarted.
+def download_and_deploy_service():
+    """ Downloads from swift container and deploys service payload
     """
+    payload_local_path = download_service_payload_from_swift_container()
+    
+    # In case an empty path is returned, search for payload settings value
+    # and treat it as a direct downloadable payload url
+    if not payload_local_path:
+        config = hookenv.config()
+        payload_local_path = config['payload']
+
+    deploy_service_payload(payload_local_path)
+
+def download_service_payload_from_swift_container():
+    """ Updates environment with 'environment_variables' defined ones,
+    gets container and payload references from config, and use them
+    to download from swift the service payload.
+    Method returns the path to the downloaded file
+    """
+    hookenv.status_set('maintenance', 'Download service payload from swift container')
+    
+    # Update environment with vars defined in 'environment_variables' config
+    update_env()
+
     config = hookenv.config()
-    if len(config.get('proxy', "")) == 0:
-        return
+    container = config['swift_container']
+    payload = config['payload']
+    if not container or not payload:
+        return ''
 
-    # Update the /etc/environment file
-    env_command = 'echo "{}={}" | sudo tee -a /etc/environment'
-    check_output(
-        env_command.format('http_proxy', config['proxy']), shell=True)
-    check_output(
-        env_command.format('https_proxy', config['proxy']), shell=True)
+    apt_install('python-swiftclient')
+    check_call(['swift', '-v', 
+        '--os-username', os.environ.get('OS_USERNAME'),
+        '--os-tenant-name', os.environ.get('OS_TENANT_NAME'),
+        '--os-password', os.environ.get('OS_PASSWORD'),
+        '--os-auth-url', os.environ.get('OS_AUTH_URL'),
+        '--os-region-name', os.environ.get('OS_REGION_NAME'),
+        'download',
+        container,
+        payload])
 
-    # Restart the snapd service
-    restart_service('snapd')
+    hookenv.status_set('maintenance', 'Service payload downloaded')
 
+    # payload would be deployed to current folder
+    return 'file://{}'.format(os.path.join(charm_dir(), payload));
 
-def install_snap():
-    hookenv.status_set('maintenance', 'Install snap')
+def deploy_service_payload(payload_path):
+    """ Gets binaries and systemd config tgz from payload path, uncompresses it in a
+    temporary folder and:
+    - moves serial-vault and serial-vault-admin to /usr/local/bin
+    - moves serial-vault.service to /etc/systemd/system
+    - creates settings and store in /usr/local/etc/settings.yaml
+    """
+    hookenv.status_set('maintenance', 'Deploy service payload')
 
-    channel = '--' + snap_channel()
+    # In case there is no payload path, read it from config payload setting
+    if not payload_path:
+        config = hookenv.config()
+        payload_path = config['payload']
+        if not payload_path:
+            raise Exception('payload not available')
+    
+    tmp_dir = tempfile.mkdtemp()
+    payload_dir = install_remote(payload_path, dest=tmp_dir)
+    if payload_dir == tmp_dir:
+        log('Got binaries tgz at {}'.format(payload_dir))
+        
+        if not os.path.isfile(os.path.join(payload_dir, 'serial-vault')):
+            log('Could not find serial-vault binary')
+            return
+        if not os.path.isfile(os.path.join(payload_dir, 'serial-vault-admin')):
+            log('Could not find serial-vault-admin binary')
+            return
+    
+        check_call(['sudo', 'mv', os.path.join(payload_dir, 'serial-vault'), '/usr/local/bin/'])
+        check_call(['sudo', 'mv', os.path.join(payload_dir, 'serial-vault-admin'), '/usr/local/bin/'])
+        check_call(['sudo', 'cp', SYSTEMD_UNIT_FILE, '/etc/systemd/system/'])
 
-    # Fetch the snap from the store and install it
-    call(['sudo', 'snap', 'install', channel, SNAP_NAME])
-
-    hookenv.status_set('maintenance', 'Installed snap')
+    hookenv.status_set('maintenance', 'Service payload deployed')
 
 
 def create_settings(postgres):
@@ -228,14 +291,6 @@ def create_settings(postgres):
         }
     )
 
-def snap_channel():
-    config = hookenv.config()
-    if config['channel'] not in ['stable', 'candidate', 'beta', 'edge']:
-        # Default to the stable channel
-        return 'stable'
-    else:
-        return config['channel']
-
 def open_port():
     """
     Open the port that is requested for the service and close the others.
@@ -247,6 +302,35 @@ def open_port():
         for port in port_config['close']:
             hookenv.close_port(port, protocol='TCP')
 
+def enable_service():
+    call(['sudo', 'systemctl', 'enable', SERVICE])
 
-def restart_service(service):
-    call(['sudo', 'systemctl', 'restart', service])
+def restart_service():
+    call(['sudo', 'systemctl', 'restart', SERVICE])
+
+def reload_systemd():
+    call(['sudo', 'systemctl', 'daemon-reload'])
+
+def update_env():
+    config = hookenv.config()
+    env_vars_string = config['environment_variables']
+
+    if env_vars_string:
+        for env_var_string in env_vars_string.split(' '):
+            key, value = env_var_string.split('=')
+            value = dequote(value)
+            log('setting env var {}={}'.format(key, value))
+            os.environ[key] = value
+
+def dequote(s):
+    """
+    If a string has single or double quotes around it, remove them.
+    If a matching pair of quotes is not found, return the string unchanged.
+    """
+
+    if (
+        s.startswith(("'", '"')) and s.endswith(("'", '"'))
+        and (s[0] == s[-1])  # make sure the pair of quotes match
+    ):
+        s = s[1:-1]
+    return s

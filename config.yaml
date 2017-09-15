@@ -15,10 +15,18 @@ options:
     type: string
     default: "2E6ZYnVYUfDLRLV/ne8M6v1jyB/376BL9ORnN3Kgb04uSFalr2ygReVsOt0PaGEIRuID10TePBje5xdjIOEjQQ=="
     description: 32 bytes long key to protect server from cross site request forgery attacks
-  channel:
+  environment_variables:
     type: string
-    default: stable
-    description: The store channel from which the snap will be installed e.g. stable, candidate, beta, edge.
+    default: ""
+    description: Blank separated key=value strings representing env vars
+  payload:
+    type: string
+    default: ""
+    description: Swift container object. This is the tgz file holding binaries and service configuration
+  swift_container:
+    type: string
+    default: "serial-vault.canonical.com"
+    description: Swift container from where download the service payload
   url_host:
     type: string
     default: serial-vault:443

@@ -1,6 +1,6 @@
 name: serial-vault
-summary: Serial Vault that signs serial assertions from Ubuntu devices.
-maintainer: James Jesudason <james.jesudason@canonical.com>
+summary: Service that signs serial assertions from Ubuntu devices.
+maintainer: Roberto Mier Escandón <roberto.escandon@canonical.com>
 description: |
   Serial Vault that signs serial assertions from Ubuntu devices using pre-defined
   GPG signing keys. The Serial Vault holds a list of approved device models and
