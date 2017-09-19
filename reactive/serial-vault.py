@@ -44,6 +44,11 @@ SYSTEMD_UNIT_FILE = os.path.join(charm_dir(), 'files', 'systemd', SERVICE)
 
 DATABASE_NAME = 'serialvault'
 
+BINDIR = '/usr/bin'
+LIBDIR = '/usr/lib/{}'.format(PROJECT)
+CONFDIR = '/etc/{}'.format(PROJECT)
+ASSETSDIR = '/usr/share/{}'.format(PROJECT)
+
 @hook("install")
 def install():
     """Charm install hook
@@ -126,9 +131,7 @@ def website_relation_changed(*args):
 
 @hook('upgrade-charm')
 def upgrade_charm():
-    # Just in case the service configuration has changed, reload the daemon also
-    reload_systemd()
-    restart_service()
+    refresh_service()
 
 def refresh_service():
     hookenv.status_set('maintenance', 'Refresh the service')
@@ -159,11 +162,8 @@ def configure_service():
 
 
 def update_config(database):
-    # Create the configuration file for the service
+    # Create the configuration file for the service in CONFDIR path
     create_settings(database)
-
-    # Send the configuration file to its right path
-    check_call(['sudo', 'mv', 'settings.yaml', '/usr/local/etc/'])
 
     # Restart the service
     restart_service()
@@ -241,11 +241,13 @@ def download_service_payload_from_swift_container():
     return 'file://{}'.format(os.path.join(charm_dir(), payload));
 
 def deploy_service_payload(payload_path):
-    """ Gets binaries and systemd config tgz from payload path, uncompresses it in a
+    """ Gets serial vault payload, uncompresses it in a
     temporary folder and:
-    - moves serial-vault and serial-vault-admin to /usr/local/bin
+    - moves serial-vault and serial-vault-admin to /usr/lib/serial-vault
+    - moves static assets to /usr/share/serial-vault
     - moves serial-vault.service to /etc/systemd/system
-    - creates settings and store in /usr/local/etc/settings.yaml
+    - creates settings and store in /etc/serial-vault/settings.yaml
+    - creates launchers and stores them in /usr/bin which will use the ones in /usr/lib/serial-vault
     """
     hookenv.status_set('maintenance', 'Deploy service payload')
 
@@ -267,10 +269,28 @@ def deploy_service_payload(payload_path):
         if not os.path.isfile(os.path.join(payload_dir, 'serial-vault-admin')):
             log('Could not find serial-vault-admin binary')
             return
+        if not os.path.isdir(os.path.join(payload_dir, 'static')):
+            log('Could not find static assets')
+            return
     
-        check_call(['sudo', 'mv', os.path.join(payload_dir, 'serial-vault'), '/usr/local/bin/'])
-        check_call(['sudo', 'mv', os.path.join(payload_dir, 'serial-vault-admin'), '/usr/local/bin/'])
+        # In case this is updating assets, remove old ones folder.
+        if os.path.exists(ASSETSDIR):
+            shutil.rmtree(ASSETSDIR)
+        os.mkdir(ASSETSDIR, mode=755)
+        
+        if not os.path.exists(CONFDIR):
+            os.mkdir(CONFDIR, mode=755)
+        if not os.path.exists(LIBDIR):
+            os.mkdir(LIBDIR, mode=755)
+
+        check_call(['sudo', 'mv', os.path.join(payload_dir, 'serial-vault'), LIBDIR])
+        check_call(['sudo', 'mv', os.path.join(payload_dir, 'serial-vault-admin'), LIBDIR])
+        check_call(['sudo', 'mv', os.path.join(payload_dir, 'static'), ASSETSDIR])
         check_call(['sudo', 'cp', SYSTEMD_UNIT_FILE, '/etc/systemd/system/'])
+        create_launchers()
+
+        # Reload daemon, as systemd service task file has been overriden
+        reload_systemd()
 
     hookenv.status_set('maintenance', 'Service payload deployed')
 
@@ -280,14 +300,36 @@ def create_settings(postgres):
     config = hookenv.config()
     templating.render(
         source='settings.yaml',
-        target='settings.yaml',
+        target='{}/{}'.format(CONFDIR, 'settings.yaml'),
         context={
+            'docRoot': ASSETSDIR,
             'keystore_secret': config['keystore_secret'],
             'service_type': config['service_type'],
             'csrf_auth_key': config['csrf_auth_key'],
             'db': postgres,
             'url_host': config['url_host'],
             'enable_user_auth': bool(config['enable_user_auth']),
+        }
+    )
+
+def create_launchers():
+    # bindir context var is assigned to LIBDIR because is where binaries will be stored.
+    # Launchers will be stored instead in /usr/bin pointing to these LIBDIR binaries
+    templating.render(
+        source='serial-vault-admin-launcher.sh',
+        target='{}/{}'.format(BINDIR, 'serial-vault-admin'),
+        context={
+            'bindir': LIBDIR,
+            'confdir': CONFDIR,
+        }
+    )
+
+    templating.render(
+        source='serial-vault-launcher.sh',
+        target='{}/{}'.format(BINDIR, 'serial-vault'),
+        context={
+            'bindir': LIBDIR,
+            'confdir': CONFDIR,
         }
     )
 
