@@ -283,10 +283,10 @@ def deploy_service_payload(payload_path):
         if not os.path.exists(LIBDIR):
             os.mkdir(LIBDIR, mode=755)
 
-        check_call(['sudo', 'mv', os.path.join(payload_dir, 'serial-vault'), LIBDIR])
-        check_call(['sudo', 'mv', os.path.join(payload_dir, 'serial-vault-admin'), LIBDIR])
-        check_call(['sudo', 'mv', os.path.join(payload_dir, 'static'), ASSETSDIR])
-        check_call(['sudo', 'cp', SYSTEMD_UNIT_FILE, '/etc/systemd/system/'])
+        shutil.move(os.path.join(payload_dir, 'serial-vault'), LIBDIR)
+        shutil.move(os.path.join(payload_dir, 'serial-vault-admin'), LIBDIR)
+        shutil.move(os.path.join(payload_dir, 'static'), ASSETSDIR)
+        shutil.copy(SYSTEMD_UNIT_FILE, '/etc/systemd/system/')
         create_launchers()
 
         # Reload daemon, as systemd service task file has been overriden
@@ -298,9 +298,10 @@ def deploy_service_payload(payload_path):
 def create_settings(postgres):
     hookenv.status_set('maintenance', 'Configuring service')
     config = hookenv.config()
+    settings_path = '{}/{}'.format(CONFDIR, 'settings.yaml') 
     templating.render(
         source='settings.yaml',
-        target='{}/{}'.format(CONFDIR, 'settings.yaml'),
+        target=settings_path,
         context={
             'docRoot': ASSETSDIR,
             'keystore_secret': config['keystore_secret'],
@@ -311,27 +312,33 @@ def create_settings(postgres):
             'enable_user_auth': bool(config['enable_user_auth']),
         }
     )
+    os.chmod(settings_path, 755)
 
 def create_launchers():
     # bindir context var is assigned to LIBDIR because is where binaries will be stored.
     # Launchers will be stored instead in /usr/bin pointing to these LIBDIR binaries
+    sv_admin_path = '{}/{}'.format(BINDIR, 'serial-vault-admin')
     templating.render(
         source='serial-vault-admin-launcher.sh',
-        target='{}/{}'.format(BINDIR, 'serial-vault-admin'),
+        target=sv_admin_path,
         context={
             'bindir': LIBDIR,
             'confdir': CONFDIR,
         }
     )
 
+    sv_path = '{}/{}'.format(BINDIR, 'serial-vault')
     templating.render(
         source='serial-vault-launcher.sh',
-        target='{}/{}'.format(BINDIR, 'serial-vault'),
+        target=sv_path,
         context={
             'bindir': LIBDIR,
             'confdir': CONFDIR,
         }
     )
+
+    os.chmod(sv_admin_path, 755)
+    os.chmod(sv_path, 755)
 
 def open_port():
     """
