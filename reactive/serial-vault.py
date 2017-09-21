@@ -3,7 +3,6 @@ import tempfile
 import shutil
 
 from subprocess import (
-    call,
     check_call,
     check_output
 )
@@ -17,7 +16,8 @@ from charmhelpers.core.hookenv import (
     related_units)
 from charmhelpers.core import (
     templating,
-    hookenv
+    hookenv,
+    host
 )
 from charmhelpers.fetch import (
     apt_install,
@@ -133,6 +133,7 @@ def website_relation_changed(*args):
 def upgrade_charm():
     refresh_service()
 
+
 def refresh_service():
     hookenv.status_set('maintenance', 'Refresh the service')
 
@@ -143,6 +144,7 @@ def refresh_service():
 
     hookenv.status_set('active', '')
     set_state(ACTIVE)
+
 
 def configure_service():
     """Create service config file and place it in /usr/local/etc.
@@ -194,6 +196,7 @@ def get_database():
 
     return database
 
+
 def download_and_deploy_service():
     """ Downloads from swift container and deploys service payload
     """
@@ -206,6 +209,7 @@ def download_and_deploy_service():
         payload_local_path = config['payload']
 
     deploy_service_payload(payload_local_path)
+
 
 def download_service_payload_from_swift_container():
     """ Updates environment with 'environment_variables' defined ones,
@@ -239,6 +243,7 @@ def download_service_payload_from_swift_container():
 
     # payload would be deployed to current folder
     return 'file://{}'.format(os.path.join(charm_dir(), payload));
+
 
 def deploy_service_payload(payload_path):
     """ Gets serial vault payload, uncompresses it in a
@@ -314,6 +319,7 @@ def create_settings(postgres):
     )
     os.chmod(settings_path, 755)
 
+
 def create_launchers():
     # bindir context var is assigned to LIBDIR because is where binaries will be stored.
     # Launchers will be stored instead in /usr/bin pointing to these LIBDIR binaries
@@ -340,6 +346,7 @@ def create_launchers():
     os.chmod(sv_admin_path, 755)
     os.chmod(sv_path, 755)
 
+
 def open_port():
     """
     Open the port that is requested for the service and close the others.
@@ -351,14 +358,18 @@ def open_port():
         for port in port_config['close']:
             hookenv.close_port(port, protocol='TCP')
 
+
 def enable_service():
-    call(['sudo', 'systemctl', 'enable', SERVICE])
+    host.service('enable', SERVICE)
+
 
 def restart_service():
-    call(['sudo', 'systemctl', 'restart', SERVICE])
+    host.service_restart(SERVICE)
+
 
 def reload_systemd():
-    call(['sudo', 'systemctl', 'daemon-reload'])
+    host.service_reload('daemon-reload')
+
 
 def update_env():
     config = hookenv.config()
@@ -370,6 +381,7 @@ def update_env():
             value = dequote(value)
             log('setting env var {}={}'.format(key, value))
             os.environ[key] = value
+
 
 def dequote(s):
     """
