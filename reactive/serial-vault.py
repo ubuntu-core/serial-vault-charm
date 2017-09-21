@@ -3,7 +3,6 @@ import tempfile
 import shutil
 
 from subprocess import (
-    call,
     check_call,
     check_output
 )
@@ -17,7 +16,8 @@ from charmhelpers.core.hookenv import (
     related_units)
 from charmhelpers.core import (
     templating,
-    hookenv
+    hookenv,
+    host
 )
 from charmhelpers.fetch import (
     apt_install,
@@ -43,6 +43,11 @@ ACTIVE = '{}.active'.format(PROJECT)
 SYSTEMD_UNIT_FILE = os.path.join(charm_dir(), 'files', 'systemd', SERVICE)
 
 DATABASE_NAME = 'serialvault'
+
+BINDIR = '/usr/bin'
+LIBDIR = '/usr/lib/{}'.format(PROJECT)
+CONFDIR = '/etc/{}'.format(PROJECT)
+ASSETSDIR = '/usr/share/{}'.format(PROJECT)
 
 @hook("install")
 def install():
@@ -126,9 +131,8 @@ def website_relation_changed(*args):
 
 @hook('upgrade-charm')
 def upgrade_charm():
-    # Just in case the service configuration has changed, reload the daemon also
-    reload_systemd()
-    restart_service()
+    refresh_service()
+
 
 def refresh_service():
     hookenv.status_set('maintenance', 'Refresh the service')
@@ -140,6 +144,7 @@ def refresh_service():
 
     hookenv.status_set('active', '')
     set_state(ACTIVE)
+
 
 def configure_service():
     """Create service config file and place it in /usr/local/etc.
@@ -159,11 +164,8 @@ def configure_service():
 
 
 def update_config(database):
-    # Create the configuration file for the service
+    # Create the configuration file for the service in CONFDIR path
     create_settings(database)
-
-    # Send the configuration file to its right path
-    check_call(['sudo', 'mv', 'settings.yaml', '/usr/local/etc/'])
 
     # Restart the service
     restart_service()
@@ -194,6 +196,7 @@ def get_database():
 
     return database
 
+
 def download_and_deploy_service():
     """ Downloads from swift container and deploys service payload
     """
@@ -206,6 +209,7 @@ def download_and_deploy_service():
         payload_local_path = config['payload']
 
     deploy_service_payload(payload_local_path)
+
 
 def download_service_payload_from_swift_container():
     """ Updates environment with 'environment_variables' defined ones,
@@ -240,12 +244,15 @@ def download_service_payload_from_swift_container():
     # payload would be deployed to current folder
     return 'file://{}'.format(os.path.join(charm_dir(), payload));
 
+
 def deploy_service_payload(payload_path):
-    """ Gets binaries and systemd config tgz from payload path, uncompresses it in a
+    """ Gets serial vault payload, uncompresses it in a
     temporary folder and:
-    - moves serial-vault and serial-vault-admin to /usr/local/bin
+    - moves serial-vault and serial-vault-admin to /usr/lib/serial-vault
+    - moves static assets to /usr/share/serial-vault
     - moves serial-vault.service to /etc/systemd/system
-    - creates settings and store in /usr/local/etc/settings.yaml
+    - creates settings and store in /etc/serial-vault/settings.yaml
+    - creates launchers and stores them in /usr/bin which will use the ones in /usr/lib/serial-vault
     """
     hookenv.status_set('maintenance', 'Deploy service payload')
 
@@ -267,10 +274,28 @@ def deploy_service_payload(payload_path):
         if not os.path.isfile(os.path.join(payload_dir, 'serial-vault-admin')):
             log('Could not find serial-vault-admin binary')
             return
+        if not os.path.isdir(os.path.join(payload_dir, 'static')):
+            log('Could not find static assets')
+            return
     
-        check_call(['sudo', 'mv', os.path.join(payload_dir, 'serial-vault'), '/usr/local/bin/'])
-        check_call(['sudo', 'mv', os.path.join(payload_dir, 'serial-vault-admin'), '/usr/local/bin/'])
-        check_call(['sudo', 'cp', SYSTEMD_UNIT_FILE, '/etc/systemd/system/'])
+        # In case this is updating assets, remove old ones folder.
+        if os.path.exists(ASSETSDIR):
+            shutil.rmtree(ASSETSDIR)
+        os.mkdir(ASSETSDIR, mode=755)
+        
+        if not os.path.exists(CONFDIR):
+            os.mkdir(CONFDIR, mode=755)
+        if not os.path.exists(LIBDIR):
+            os.mkdir(LIBDIR, mode=755)
+
+        shutil.move(os.path.join(payload_dir, 'serial-vault'), LIBDIR)
+        shutil.move(os.path.join(payload_dir, 'serial-vault-admin'), LIBDIR)
+        shutil.move(os.path.join(payload_dir, 'static'), ASSETSDIR)
+        shutil.copy(SYSTEMD_UNIT_FILE, '/etc/systemd/system/')
+        create_launchers()
+
+        # Reload daemon, as systemd service task file has been overriden
+        reload_systemd()
 
     hookenv.status_set('maintenance', 'Service payload deployed')
 
@@ -278,10 +303,12 @@ def deploy_service_payload(payload_path):
 def create_settings(postgres):
     hookenv.status_set('maintenance', 'Configuring service')
     config = hookenv.config()
+    settings_path = '{}/{}'.format(CONFDIR, 'settings.yaml') 
     templating.render(
         source='settings.yaml',
-        target='settings.yaml',
+        target=settings_path,
         context={
+            'docRoot': ASSETSDIR,
             'keystore_secret': config['keystore_secret'],
             'service_type': config['service_type'],
             'csrf_auth_key': config['csrf_auth_key'],
@@ -290,6 +317,35 @@ def create_settings(postgres):
             'enable_user_auth': bool(config['enable_user_auth']),
         }
     )
+    os.chmod(settings_path, 755)
+
+
+def create_launchers():
+    # bindir context var is assigned to LIBDIR because is where binaries will be stored.
+    # Launchers will be stored instead in /usr/bin pointing to these LIBDIR binaries
+    sv_admin_path = '{}/{}'.format(BINDIR, 'serial-vault-admin')
+    templating.render(
+        source='serial-vault-admin-launcher.sh',
+        target=sv_admin_path,
+        context={
+            'bindir': LIBDIR,
+            'confdir': CONFDIR,
+        }
+    )
+
+    sv_path = '{}/{}'.format(BINDIR, 'serial-vault')
+    templating.render(
+        source='serial-vault-launcher.sh',
+        target=sv_path,
+        context={
+            'bindir': LIBDIR,
+            'confdir': CONFDIR,
+        }
+    )
+
+    os.chmod(sv_admin_path, 755)
+    os.chmod(sv_path, 755)
+
 
 def open_port():
     """
@@ -302,14 +358,18 @@ def open_port():
         for port in port_config['close']:
             hookenv.close_port(port, protocol='TCP')
 
+
 def enable_service():
-    call(['sudo', 'systemctl', 'enable', SERVICE])
+    host.service('enable', SERVICE)
+
 
 def restart_service():
-    call(['sudo', 'systemctl', 'restart', SERVICE])
+    host.service_restart(SERVICE)
+
 
 def reload_systemd():
-    call(['sudo', 'systemctl', 'daemon-reload'])
+    host.service_reload('daemon-reload')
+
 
 def update_env():
     config = hookenv.config()
@@ -321,6 +381,7 @@ def update_env():
             value = dequote(value)
             log('setting env var {}={}'.format(key, value))
             os.environ[key] = value
+
 
 def dequote(s):
     """
