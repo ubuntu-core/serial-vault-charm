@@ -14,7 +14,7 @@ options:
   csrf_auth_key:
     type: string
     default: "2E6ZYnVYUfDLRLV/ne8M6v1jyB/376BL9ORnN3Kgb04uSFalr2ygReVsOt0PaGEIRuID10TePBje5xdjIOEjQQ=="
-    description: 32 bytes long key to protect server from cross site request forgery attacks
+    description: 64 bytes long, base64 encoded key to protect server from cross site request forgery attacks
   environment_variables:
     type: string
     default: ""
@@ -35,3 +35,7 @@ options:
     type: boolean
     default: true
     description: Enable user authentication using Ubuntu SSO
+  jwt_secret:
+    type: string
+    default: "kich9KamaigeiQuiZee9uogeojahRe9Noh8aemu6Noh7chie6ool5umo6iki0Phe"
+    description: "64 bytes long key to digitally sign exchanged info with USSO" 

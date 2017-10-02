@@ -315,6 +315,7 @@ def create_settings(postgres):
             'db': postgres,
             'url_host': config['url_host'],
             'enable_user_auth': bool(config['enable_user_auth']),
+            'jwt_secret': config['jwt_secret'],
         }
     )
     os.chmod(settings_path, 755)
