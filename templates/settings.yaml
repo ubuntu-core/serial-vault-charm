@@ -15,7 +15,7 @@ datasource: "dbname={{ db.database }} host={{ db.host }} port={{ db.port }} user
 keystore: "database"
 keystoreSecret: "{{ keystore_secret }}"
 
-# 32 bytes long key to protect server from cross site request forgery attacks
+# 64 bytes long, base64 encoded key to protect server from cross site request forgery attacks
 csrfAuthKey: "{{ csrf_auth_key }}"
 
 # Return URL of the service (needed for OpenID)
@@ -24,3 +24,6 @@ urlScheme: https
 
 # Enable user authentication using Ubuntu SSO
 enableUserAuth: {{ enable_user_auth }}
+
+# 64 bytes long key to digitally sign exchanged info with USSO
+jwtSecret: {{ jwt_secret }}
