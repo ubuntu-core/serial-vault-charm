@@ -288,8 +288,8 @@ def deploy_service_payload(payload_path):
         if not os.path.exists(LIBDIR):
             os.mkdir(LIBDIR, mode=755)
 
-        shutil.move(os.path.join(payload_dir, 'serial-vault'), LIBDIR)
-        shutil.move(os.path.join(payload_dir, 'serial-vault-admin'), LIBDIR)
+        shutil.move(os.path.join(payload_dir, 'serial-vault'), os.path.join(LIBDIR, 'serial-vault'))
+        shutil.move(os.path.join(payload_dir, 'serial-vault-admin'), os.path.join(LIBDIR, 'serial-vault-admin'))
         shutil.move(os.path.join(payload_dir, 'static'), ASSETSDIR)
         shutil.copy(SYSTEMD_UNIT_FILE, '/etc/systemd/system/')
         create_launchers()
