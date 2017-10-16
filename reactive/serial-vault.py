@@ -39,8 +39,10 @@ PROJECT = 'serial-vault'
 SERVICE = '{}.service'.format(PROJECT)
 AVAILABLE = '{}.available'.format(PROJECT)
 ACTIVE = '{}.active'.format(PROJECT)
+CACHE_ACCOUNTS = 'cache_accounts'
 
 SYSTEMD_UNIT_FILE = os.path.join(charm_dir(), 'files', 'systemd', SERVICE)
+CRON_JOB_FILE = os.path.join(charm_dir(), 'files', 'cron.d', CACHE_ACCOUNTS)
 
 DATABASE_NAME = 'serialvault'
 
@@ -297,7 +299,21 @@ def deploy_service_payload(payload_path):
         # Reload daemon, as systemd service task file has been overriden
         reload_systemd()
 
+        # Deploy cron job to cache store accounts if this is an admin service unit
+        deploy_cache_accounts_cron_job()
+
     hookenv.status_set('maintenance', 'Service payload deployed')
+
+
+def deploy_cache_accounts_cron_job():
+    """ Creates a cron job in serial vault admin units to cache hourly
+    account assertions obtained from store.
+    """
+    config = hookenv.config()
+    if config['service_type'] == 'admin':
+        cron_files_path = '/etc/cron.d/'
+        shutil.copy(CRON_JOB_FILE, cron_files_path)
+        os.chmod(os.path.join(cron_files_path, CACHE_ACCOUNTS), 0o644)
 
 
 def create_settings(postgres):
@@ -318,7 +334,7 @@ def create_settings(postgres):
             'jwt_secret': config['jwt_secret'],
         }
     )
-    os.chmod(settings_path, 755)
+    os.chmod(settings_path, 0o755)
 
 
 def create_launchers():
@@ -344,8 +360,8 @@ def create_launchers():
         }
     )
 
-    os.chmod(sv_admin_path, 755)
-    os.chmod(sv_path, 755)
+    os.chmod(sv_admin_path, 0o755)
+    os.chmod(sv_path, 0o755)
 
 
 def open_port():
@@ -369,7 +385,7 @@ def restart_service():
 
 
 def reload_systemd():
-    host.service_reload('daemon-reload')
+    check_call(['systemctl', 'daemon-reload'])
 
 
 def update_env():
