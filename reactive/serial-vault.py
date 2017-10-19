@@ -396,7 +396,7 @@ def update_env():
         for env_var_string in env_vars_string.split(' '):
             key, value = env_var_string.split('=')
             value = dequote(value)
-            log('setting env var {}={}'.format(key, value))
+            log('setting env var {}'.format(key))
             os.environ[key] = value
 
 
