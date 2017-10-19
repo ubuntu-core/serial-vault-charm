@@ -4,7 +4,8 @@ import shutil
 
 from subprocess import (
     check_call,
-    check_output
+    check_output,
+    CalledProcessError
 )
 from charmhelpers.core.hookenv import (
     charm_dir, 
@@ -231,15 +232,19 @@ def download_service_payload_from_swift_container():
         return ''
 
     apt_install('python-swiftclient')
-    check_call(['swift', '-v', 
-        '--os-username', os.environ.get('OS_USERNAME'),
-        '--os-tenant-name', os.environ.get('OS_TENANT_NAME'),
-        '--os-password', os.environ.get('OS_PASSWORD'),
-        '--os-auth-url', os.environ.get('OS_AUTH_URL'),
-        '--os-region-name', os.environ.get('OS_REGION_NAME'),
-        'download',
-        container,
-        payload])
+
+    try:
+        check_call(['swift', '-v', 
+            '--os-username', os.environ.get('OS_USERNAME'),
+            '--os-tenant-name', os.environ.get('OS_TENANT_NAME'),
+            '--os-password', os.environ.get('OS_PASSWORD'),
+            '--os-auth-url', os.environ.get('OS_AUTH_URL'),
+            '--os-region-name', os.environ.get('OS_REGION_NAME'),
+            'download',
+            container,
+            payload])
+    except CalledProcessError as ex:
+        log('Error downloading payload from swift container: {}. Instruction: {}'.format(ex.returncode, ex.cmd))
 
     hookenv.status_set('maintenance', 'Service payload downloaded')
 
