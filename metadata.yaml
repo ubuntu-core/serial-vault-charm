@@ -10,6 +10,9 @@ tags:
 provides:
   website:
     interface: http
+  nrpe-external-master:
+    interface: nrpe-external-master
+    scope: container
 requires:
   database:
     interface: pgsql

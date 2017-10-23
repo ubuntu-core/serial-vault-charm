@@ -29,6 +29,7 @@ from charms.reactive import (
     is_state, 
     set_state
 )
+from charmhelpers.contrib.charmsupport import nrpe
 
 PORTS = {
     'admin': {'open': 8081, 'close': [8080, 8082]},
@@ -136,6 +137,18 @@ def website_relation_changed(*args):
 def upgrade_charm():
     refresh_service()
 
+@hook('nrpe-external-master-relation-changed')
+def update_nrpe_checks(*args):
+    nrpe_compat = nrpe.NRPE()
+    conf = nrpe_compat.config
+    check_http_params = conf.get('nagios_check_http_params')
+    if check_http_params:
+        nrpe_compat.add_check(
+            shortname='vhost',
+            description='Check Virtual Host',
+            check_cmd='check_http %s' % check_http_params
+        )
+    nrpe_compat.write()
 
 def refresh_service():
     hookenv.status_set('maintenance', 'Refresh the service')
