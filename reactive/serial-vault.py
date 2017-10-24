@@ -257,7 +257,7 @@ def download_service_payload_from_swift_container():
             container,
             payload])
     except CalledProcessError as ex:
-        log('Error downloading payload from swift container: {}. Instruction: {}'.format(ex.returncode, ex.cmd))
+        log('Error downloading payload from swift container: {}'.format(ex.returncode))
 
     hookenv.status_set('maintenance', 'Service payload downloaded')
 
